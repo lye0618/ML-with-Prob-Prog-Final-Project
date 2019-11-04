@@ -16,8 +16,11 @@ import pandas as pd
 
 data = pd.read_csv('/mnt/d/mlpp/data/prices-split-adjusted.csv')
 data['return'] = (data['close'] / data['open']) - 1
+arr = data['return'].values
 
 y = torch.tensor(data['return'].values)
+y = torch.from_numpy(arr)
+y = y.type(torch.FloatTensor)
 
 
 # Trying with fixed number of components
@@ -46,6 +49,12 @@ global_guide = AutoDelta(poutine.block(model, expose=['weights', 'locs', 'scale'
 optim = pyro.optim.Adam({'lr': 0.1, 'betas': [0.8, 0.99]})
 elbo = TraceEnum_ELBO(max_plate_nesting=1)
 svi = SVI(model, global_guide, optim, loss=elbo)
+
+
+n_steps = 50
+# do gradient steps
+for step in range(n_steps):
+    svi.step(y)
 
 
 # Initializations
