@@ -25,7 +25,17 @@ price = pd.read_csv("prices-split-adjusted.csv")
 
 fundamental = pd.read_csv("fundamentals.csv")
 
-data = pd.merge(price,fundamental,left_on=['symbol','date'],right_on = ['Ticker Symbol','Period Ending'])
+fundamental.rename(columns={'Ticker Symbol': 'symbol', 'Period Ending': 'date'}, inplace=True)
+
+fundamental['date']=pd.to_datetime(fundamental['date'])
+price['date']=pd.to_datetime(price['date'])
+
+price = price.sort_values(['symbol', 'date']).reset_index()
+fundamental = fundamental.sort_values(['symbol', 'date']).reset_index()
+
+
+#data = pd.merge_asof(price,fundamental,on='date',by='symbol',tolerance=pd.Timedelta('90days'))
+data = pd.merge(price,fundamental,on=['date','symbol'])
 
 
 data['return'] = (data['close']/data['open']-1)
