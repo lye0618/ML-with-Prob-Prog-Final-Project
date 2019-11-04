@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
 import os
 from functools import partial
 import numpy as np
@@ -27,10 +21,11 @@ import pyro.poutine as poutine
 
 
 
-data = pd.read_csv("prices-split-adjusted.csv")
+price = pd.read_csv("prices-split-adjusted.csv")
 
+fundamental = pd.read_csv("fundamentals.csv")
 
-data.head(10)
+data = pd.merge(price,fundamental,left_on=['symbol','date'],right_on = ['Ticker Symbol','Period Ending'])
 
 
 data['return'] = (data['close']/data['open']-1)
@@ -39,10 +34,6 @@ y_train = data['return'].values
 
 x_data = torch.tensor(x_train, dtype=torch.float)
 x_data = torch.tensor(y_train, dtype=torch.float)
-
-
-# In[ ]:
-
 
 
 
