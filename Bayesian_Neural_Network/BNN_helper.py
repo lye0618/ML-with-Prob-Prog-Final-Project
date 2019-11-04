@@ -20,7 +20,7 @@ from pyro.optim import Adam
 
 class NN(nn.Module):
     
-    def __init__(self, input_size, hidden_sizes=[10], output_size=1, activ_func=F.relu, last_activ_func=nn.Identity):
+    def __init__(self, input_size, hidden_sizes=[10], output_size=1, activ_func=F.relu):
         
         super(NN, self).__init__()
         
@@ -28,7 +28,6 @@ class NN(nn.Module):
         
         self.hidden_sizes = hidden_sizes
         self.activ_func = activ_func
-        self.last_activ_func = last_activ_func
         
         #self.fc_layers['h0'] = nn.Linear(input_size, hidden_sizes[0])
         
@@ -52,7 +51,7 @@ class NN(nn.Module):
         for i in range(len(self.hidden_sizes)-1):
             output = self.activ_func(getattr(self, 'h'+str(i+1))(output))
         
-        output = self.last_activ_func(self.out(output))
+        output = self.out(output)
         
         return output
 
@@ -64,8 +63,10 @@ class BNN_CLF(object):
         super(BNN_CLF, self).__init__()
         assert len(n_hiddens) > 0
         
-        self.net = NN(n_inputs, n_hiddens, n_classes, activ_func, nn.LogSoftmax(dim=1))
-    
+        self.net = NN(n_inputs, n_hiddens, n_classes, activ_func)
+        
+        self.log_softmax = nn.LogSoftmax(dim=1)
+        
     def model(self, features, target):
         
         self.priors = {}
@@ -81,10 +82,11 @@ class BNN_CLF(object):
         lifted_module = pyro.random_module("module", self.net, self.priors)
         # sample a regressor (which also samples w and b)
         model_sample = lifted_module()
+        #print(model_sample)
         
-        yhat = model_sample(features)
-    
         with pyro.plate("data", len(target)):
+            
+            yhat = self.log_softmax(model_sample(features))
             pyro.sample("obs", Categorical(logits=yhat), obs=target) #target is not one-hot encoded
     
     def guide(self, features, target):
@@ -92,16 +94,19 @@ class BNN_CLF(object):
         self.est_priors = {}
         
         for i in range(len(self.net.hidden_sizes)):
-            mu = pyro.param('h'+str(i)+'_w_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).weight))
-            sigma = nn.Softplus(pyro.param('h'+str(i)+'_w_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).weight)))
-            self.est_priors['h'+str(i)+'.weight'] = Normal(loc=mu, scale=sigma)
+            hw_mu = pyro.param('h'+str(i)+'_w_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).weight))
+            hw_sigma = F.softplus(pyro.param('h'+str(i)+'_w_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).weight)))
+            self.est_priors['h'+str(i)+'.weight'] = Normal(loc=hw_mu, scale=hw_sigma)
+            hb_mu = pyro.param('h'+str(i)+'_b_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).bias))
+            hb_sigma = F.softplus(pyro.param('h'+str(i)+'_b_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).bias)))
+            self.est_priors['h'+str(i)+'.bias'] = Normal(loc=hb_mu, scale=hb_sigma)
         
         outw_mu = pyro.param('out'+'_w_' + 'mu', torch.randn_like(self.net.out.weight))
-        outw_sigma = nn.Softplus(pyro.param('out'+'_w_' + 'sigma', torch.randn_like(self.net.out.weight)))
+        outw_sigma = F.softplus(pyro.param('out'+'_w_' + 'sigma', torch.randn_like(self.net.out.weight)))
         self.est_priors['out'+'.weight'] = Normal(loc=outw_mu, scale=outw_sigma).to_event(1)
         
         outb_mu = pyro.param('out'+'_b_' + 'mu', torch.randn_like(self.net.out.bias))
-        outb_sigma = nn.Softplus(pyro.param('out'+'_b_' + 'sigma', torch.randn_like(self.net.out.bias)))
+        outb_sigma = F.softplus(pyro.param('out'+'_b_' + 'sigma', torch.randn_like(self.net.out.bias)))
         self.est_priors['out'+'.bias'] = Normal(loc=outb_mu, scale=outb_sigma)
         
         # lift module parameters to random variables sampled from the priors
@@ -128,8 +133,8 @@ class BNN_CLF(object):
             
             for i in range(num_examples // batch_size):
                 
-                X_data_minibatch = X_data_i[i*self.batch_size:(i+1)*self.batch_size]
-                Y_data_minibatch = Y_data_i[i*self.batch_size:(i+1)*self.batch_size]
+                X_data_minibatch = X_data_i[i*batch_size:(i+1)*batch_size]
+                Y_data_minibatch = Y_data_i[i*batch_size:(i+1)*batch_size]
                 
                 loss = self.svi.step(X_data_minibatch, Y_data_minibatch)
                 
@@ -140,18 +145,18 @@ class BNN_CLF(object):
     def predict(self, X_data, n_samples):
         
         sampled_models = [self.guide(None, None) for _ in range(n_samples)]
-        yhats = [self.model(X_data).data for model in sampled_models]
+        yhats = [model(X_data).data for model in sampled_models]
         mean = torch.mean(torch.stack(yhats), 0)
-        return torch.argmax(mean, dim=1)
+        return yhats, torch.argmax(mean, dim=1)
     
 class BNN_REG(object):
     
     def __init__(self, n_inputs, n_hiddens=[10], activ_func=F.relu):
         
-        super(BNN_CLF, self).__init__()
+        super(BNN_REG, self).__init__()
         assert len(n_hiddens) > 0
         
-        self.net = NN(n_inputs, n_hiddens, 1, activ_func, nn.Identity)
+        self.net = NN(n_inputs, n_hiddens, 1, activ_func)
     
     def model(self, features, target):
         
@@ -172,7 +177,11 @@ class BNN_REG(object):
         out_sigma = pyro.sample("sigma", Uniform(0., 10.))
     
         with pyro.plate("data", len(target)):
-            pyro.sample("obs", Normal(model_sample, out_sigma), obs=target) #target is not one-hot encoded
+            
+            target_mean = model_sample(features)
+            pyro.sample("obs", Normal(target_mean, out_sigma), obs=target) #target is not one-hot encoded
+            
+            return target_mean
     
     def guide(self, features, target):
         
@@ -180,21 +189,24 @@ class BNN_REG(object):
         
         for i in range(len(self.net.hidden_sizes)):
             mu = pyro.param('h'+str(i)+'_w_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).weight))
-            sigma = nn.Softplus(pyro.param('h'+str(i)+'_w_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).weight)))
+            sigma = F.softplus(pyro.param('h'+str(i)+'_w_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).weight)))
             self.est_priors['h'+str(i)+'.weight'] = Normal(loc=mu, scale=sigma)
+            hb_mu = pyro.param('h'+str(i)+'_b_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).bias))
+            hb_sigma = F.softplus(pyro.param('h'+str(i)+'_b_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).bias)))
+            self.est_priors['h'+str(i)+'.bias'] = Normal(loc=hb_mu, scale=hb_sigma)
         
         outw_mu = pyro.param('out'+'_w_' + 'mu', torch.randn_like(self.net.out.weight))
-        outw_sigma = nn.Softplus(pyro.param('out'+'_w_' + 'sigma', torch.randn_like(self.net.out.weight)))
+        outw_sigma = F.softplus(pyro.param('out'+'_w_' + 'sigma', torch.randn_like(self.net.out.weight)))
         self.est_priors['out'+'.weight'] = Normal(loc=outw_mu, scale=outw_sigma).to_event(1)
         
         outb_mu = pyro.param('out'+'_b_' + 'mu', torch.randn_like(self.net.out.bias))
-        outb_sigma = nn.Softplus(pyro.param('out'+'_b_' + 'sigma', torch.randn_like(self.net.out.bias)))
+        outb_sigma = F.softplus(pyro.param('out'+'_b_' + 'sigma', torch.randn_like(self.net.out.bias)))
         self.est_priors['out'+'.bias'] = Normal(loc=outb_mu, scale=outb_sigma)
         
         # lift module parameters to random variables sampled from the priors
         lifted_module = pyro.random_module("module", self.net, self.est_priors)
         
-        sigma_loc = nn.Softplus(pyro.param('sigma_loc', torch.randn(1)))
+        sigma_loc = F.softplus(pyro.param('sigma_loc', torch.randn(1)))
         out_sigma = pyro.sample("sigma", Normal(sigma_loc, torch.tensor(0.05)))
         
         return lifted_module()
@@ -218,8 +230,8 @@ class BNN_REG(object):
             
             for i in range(num_examples // batch_size):
                 
-                X_data_minibatch = X_data_i[i*self.batch_size:(i+1)*self.batch_size]
-                Y_data_minibatch = Y_data_i[i*self.batch_size:(i+1)*self.batch_size]
+                X_data_minibatch = X_data_i[i*batch_size:(i+1)*batch_size]
+                Y_data_minibatch = Y_data_i[i*batch_size:(i+1)*batch_size]
                 
                 loss = self.svi.step(X_data_minibatch, Y_data_minibatch)
                 
@@ -232,4 +244,4 @@ class BNN_REG(object):
         sampled_models = [self.guide(None, None) for _ in range(n_samples)]
         yhats = [model(X_data).data for model in sampled_models]
         mean = torch.mean(torch.stack(yhats), 0)
-        return mean
+        return yhats, mean
