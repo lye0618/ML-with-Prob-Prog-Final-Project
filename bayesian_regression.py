@@ -29,10 +29,6 @@ import pyro.poutine as poutine
 # In[42]:
 
 
-
-data = pd.read_csv("prices-split-adjusted.csv")
-
-
 # In[61]:
 
 
@@ -53,16 +49,7 @@ regression_model = RegressionModel(p)
 # In[62]:
 
 
-data['return'] = (data['close']/data['open']-1)
-x_train = data[['open','close','high','low']].values
-y_train = data['return'].values
-
-x_data = torch.tensor(x_train, dtype=torch.float)
-x_data = torch.tensor(y_train, dtype=torch.float)
-
  
-
-
 # In[63]:
 
 
@@ -91,6 +78,8 @@ def model(x_data, y_data):
 
 
 pred = model(x_data, y_data)
+
+
 
 
 # In[ ]:
