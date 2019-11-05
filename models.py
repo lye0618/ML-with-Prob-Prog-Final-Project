@@ -1,9 +1,11 @@
 # Imports
 from collections import defaultdict
+import time
+import matplotlib.pyplot as plt
+
 import torch
 from torch.distributions import constraints
-import matplotlib.pyplot as plt
-import time
+
 import pyro
 import pyro.distributions as dist
 from pyro import poutine
@@ -12,7 +14,7 @@ from pyro.infer.mcmc.api import MCMC
 from pyro.infer.mcmc import NUTS
 from pyro.optim import Adam
 from pyro.infer import SVI, TraceEnum_ELBO, config_enumerate, infer_discrete
-from loader import *
+from loader import read_data
 
 
 class GMM(object):
@@ -20,12 +22,11 @@ class GMM(object):
     # Set device to CPU
     device = torch.device('cpu')
 
-    # Load data
-    df = read_data(data_type='nyse')
-    data = df['return'].values
-
     def __init__(self, n_comp, infr='svi'):
         assert infr == 'svi' or infr == 'mcmc', 'Only svi or mcmc supported'
+        # Load data
+        df = read_data(data_type='nyse')
+        data = df['return'].values
         self.tensor = torch.from_numpy(data).type(torch.FloatTensor)
         self.n_comp = n_comp
         self.guide = None
@@ -46,6 +47,12 @@ class GMM(object):
         self.mcmc_subsample = 0.1
         self.svi_itr = 100
 
+        # Initialize model
+        self.model()
+
+    ##################
+    # Model definition
+    ##################
     @config_enumerate
     def model(self):
         # Global variables.
@@ -57,8 +64,16 @@ class GMM(object):
         with pyro.plate('data', len(self.tensor)):
             # Local variables.
             assignment = pyro.sample('assignment', dist.Categorical(self.weights))
-            pyro.sample('obs', dist.Normal(self.locs[assignment], self.scale), obs=self.tensor)
+            if self.infr == 'mcmc':
+                n_obs = int(self.shape[0] * self.mcmc_subsample)
+                obs = self.tensor[torch.multinomial(torch.ones(self.shape[0]) / self.shape[0], n_obs)]
+            else:
+                obs = self.tensor
+            pyro.sample('obs', dist.Normal(self.locs[assignment], self.scale), obs=obs)
 
+    ##################
+    # SVI
+    ##################
     def guide_autodelta(self):
         self.guide = AutoDelta(poutine.block(self.model, expose=['weights', 'locs', 'scale']))
 
@@ -71,14 +86,6 @@ class GMM(object):
 
     def optimizer(self):
         self.optim = pyro.optim.Adam({'lr': 0.1, 'betas': [0.8, 0.99]})
-
-    @staticmethod
-    def set_seed(seed):
-        pyro.set_rng_seed(seed)
-
-    @staticmethod
-    def clear_params():
-        pyro.clear_param_store()
 
     def initialize(self, seed):
         self.set_seed(seed)
@@ -119,6 +126,34 @@ class GMM(object):
         for name, value in self.params.named_parameters():
             value.register_hook(lambda g, name=name: gradient_norms[name].append(g.norm().item()))
 
+    def get_svi_estimates(self):
+        estimates = self.guide(self.tensor)
+        self.weights = estimates['weights']
+        self.locs = estimates['locs']
+        self.scale = estimates['scale']
+        return self.weights, self.locs, self.scale
+
+    ##################
+    # MCMC
+    ##################
+    def init_mcmc(self, seed=42):
+        self.set_seed(seed)
+        kernel = NUTS(self.model)
+        self.mcmc = MCMC(kernel, num_samples=self.num_samples, warmup_steps=self.warmup_steps)
+
+    def run_mcmc(self):
+        self.clear_params()
+        self.init_mcmc()
+        n_obs = int(self.shape[0] * self.mcmc_subsample)
+        print(f'Running MCMC using NUTS with num_obs = {n_obs}')
+        self.mcmc.run()
+
+    def get_mcmc_samples(self):
+        return self.mcmc.get_samples()
+
+    ##################
+    # Inference
+    ##################
     def inference(self):
         if self.infr == 'svi':
             start = time.time()
@@ -141,36 +176,9 @@ class GMM(object):
             self.mcmc_time = (end - start)
             return self.get_mcmc_samples()
 
-    @staticmethod
-    def plot_svi_convergence(losses):
-        plt.figure(figsize=(10, 3), dpi=100).set_facecolor('white')
-        plt.plot(losses)
-        plt.xlabel('iters')
-        plt.ylabel('loss')
-        plt.title('Convergence of SVI')
-        plt.plot()
-
-    def get_svi_estimates(self):
-        estimates = self.guide(self.tensor)
-        self.weights = estimates['weights']
-        self.locs = estimates['locs']
-        self.scale = estimates['scale']
-        return self.weights, self.locs, self.scale
-
-    def init_mcmc(self, seed, num_samples=250, warmup_steps=50):
-        self.set_seed(seed)
-        kernel = NUTS(self.model)
-        self.mcmc = MCMC(kernel, num_samples=num_samples, warmup_steps=warmup_steps)
-
-    def run_mcmc(self, seed=42):
-        self.clear_params()
-        self.init_mcmc(seed, self.num_samples, self.warmup_steps)
-        n_obs = self.shape[0]*self.mcmc_subsample
-        self.mcmc.run(self.tensor[torch.multinomial(torch.ones(self.shape[0]) / self.shape[0], n_obs)])
-
-    def get_mcmc_samples(self):
-        return self.mcmc.get_samples()
-
+    ##################
+    # Generate stats
+    ##################
     def generate_stats(self):
         if self.svi is not None:
             svi_stats = dict({'num_samples': self.shape[0],
@@ -188,3 +196,23 @@ class GMM(object):
             mcmc_stats = None
 
         return [svi_stats, mcmc_stats]
+
+    ##################
+    # Static Methods
+    #################
+    @staticmethod
+    def set_seed(seed):
+        pyro.set_rng_seed(seed)
+
+    @staticmethod
+    def clear_params():
+        pyro.clear_param_store()
+
+    @staticmethod
+    def plot_svi_convergence(losses):
+        plt.figure(figsize=(10, 3), dpi=100).set_facecolor('white')
+        plt.plot(losses)
+        plt.xlabel('iters')
+        plt.ylabel('loss')
+        plt.title('Convergence of SVI')
+        plt.plot()
