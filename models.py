@@ -2,6 +2,7 @@
 from collections import defaultdict
 import time
 import matplotlib.pyplot as plt
+import numpy as np
 
 import torch
 from torch.distributions import constraints
@@ -22,30 +23,37 @@ class GMM(object):
     # Set device to CPU
     device = torch.device('cpu')
 
-    def __init__(self, n_comp, infr='svi'):
+    def __init__(self, n_comp=10, infr='svi'):
         assert infr == 'svi' or infr == 'mcmc', 'Only svi or mcmc supported'
         # Load data
         df = read_data(data_type='nyse')
         data = df['return'].values
         self.tensor = torch.from_numpy(data).type(torch.FloatTensor)
         self.n_comp = n_comp
-        self.guide = None
-        self.optim = Adam({'lr': 0.1, 'betas': [0.8, 0.99]})
-        self.shape = self.tensor.shape
-        self.elbo_loss = TraceEnum_ELBO(max_plate_nesting=1)
         self.infr = infr
-        self.svi = None
-        self.mcmc = None
+        self.shape = self.tensor.shape
         self.params = None
         self.weights = None
         self.locs = None
         self.scale = None
-        self.num_samples = 250
-        self.warmup_steps = 50
         self.mcmc_time = None
         self.svi_time = None
-        self.mcmc_subsample = 0.1
-        self.svi_itr = 100
+        print(f'Initializing object for inference method {self.infr}')
+        if self.infr == 'svi':
+            self.guide = None
+            self.optim = Adam({'lr': 0.1, 'betas': [0.8, 0.99]})
+            self.svi = None
+            self.svi_itr = 100
+            self.elbo_loss = TraceEnum_ELBO(max_plate_nesting=1)
+        else:
+            self.num_samples = 250
+            self.mcmc = None
+            self.warmup_steps = 50
+            self.mcmc_subsample = 0.1
+            self.n_obs = int(self.shape[0] * self.mcmc_subsample)
+            # Need to subsample in numpy array because
+            # sampling using multinomial takes ages
+            self.tensor = torch.from_numpy(np.random.choice(data, self.n_obs)).type(torch.FloatTensor)
 
         # Initialize model
         self.model()
@@ -64,12 +72,7 @@ class GMM(object):
         with pyro.plate('data', len(self.tensor)):
             # Local variables.
             assignment = pyro.sample('assignment', dist.Categorical(self.weights))
-            if self.infr == 'mcmc':
-                n_obs = int(self.shape[0] * self.mcmc_subsample)
-                obs = self.tensor[torch.multinomial(torch.ones(self.shape[0]) / self.shape[0], n_obs)]
-            else:
-                obs = self.tensor
-            pyro.sample('obs', dist.Normal(self.locs[assignment], self.scale), obs=obs)
+            pyro.sample('obs', dist.Normal(self.locs[assignment], self.scale), obs=self.tensor)
 
     ##################
     # SVI
@@ -140,12 +143,13 @@ class GMM(object):
         self.set_seed(seed)
         kernel = NUTS(self.model)
         self.mcmc = MCMC(kernel, num_samples=self.num_samples, warmup_steps=self.warmup_steps)
+        print("Initialized MCMC with NUTS kernal")
 
     def run_mcmc(self):
         self.clear_params()
+        print("Initializing MCMC")
         self.init_mcmc()
-        n_obs = int(self.shape[0] * self.mcmc_subsample)
-        print(f'Running MCMC using NUTS with num_obs = {n_obs}')
+        print(f'Running MCMC using NUTS with num_obs = {self.n_obs}')
         self.mcmc.run()
 
     def get_mcmc_samples(self):
