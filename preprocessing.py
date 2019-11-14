@@ -46,7 +46,7 @@ y_train = data['return'].values
 
 
 X_train=stats.zscore(X_train, axis=1, ddof=1)
-y_train=stats.zscore(y_train, axis=1, ddof=1)
+#y_train=stats.zscore(y_train, axis=1, ddof=1)
 
 
 X_data = torch.tensor(X_train, dtype=torch.float)
