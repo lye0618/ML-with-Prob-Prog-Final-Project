@@ -72,7 +72,9 @@ class GMM(object):
         with pyro.plate('data', len(self.tensor)):
             # Local variables.
             assignment = pyro.sample('assignment', dist.Categorical(self.weights))
-            pyro.sample('obs', dist.Normal(self.locs[assignment], self.scale), obs=self.tensor)
+            y = pyro.sample('obs', dist.Normal(self.locs[assignment], self.scale), obs=self.tensor)
+
+        return y
 
     ##################
     # SVI
@@ -135,6 +137,24 @@ class GMM(object):
         self.locs = estimates['locs']
         self.scale = estimates['scale']
         return self.weights, self.locs, self.scale
+
+    # TODO This is BS, make it vectorized
+    def get_posterior_resp(self):
+        '''
+        Formula:
+        k: cluster index
+        p(c=k|x) = w_k * N(x|mu_k, sigma_k) / sum(w_k * N(x|mu_k, sigma_k))
+        '''
+        prob_list = []
+        distri = dist.Normal(self.locs, self.scale)
+        for d in self.tensor:
+            numerator = self.weights * distri.log_prob(d)
+            denom = numerator.sum()
+            probs = numerator / denom
+            prob_list.append(probs)
+
+        final = torch.stack(prob_list)
+        return final
 
     ##################
     # MCMC
