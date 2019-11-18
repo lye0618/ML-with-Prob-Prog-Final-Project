@@ -36,8 +36,7 @@ def read_file(data_dir=DATA_DIR, cache_dir=CACHE_DIR, override=False):
 def read_data(data_type, sample=1):
     """
     Reads in data from cached messagepacks stored locally
-    :param data_type: 'gps' or 'order'
-    :param date: date string without space - yyyymmdd. Limited to single date as each file too big
+    :param data_type: 'bitstamp' or 'coinbase' or 'nyse'
     :param sample: Fraction of randomly sampled data (without replacement) to return. Defaults to full data
     :return: pandas dataframe of requested file
     """
@@ -45,12 +44,19 @@ def read_data(data_type, sample=1):
         file_name = 'bitstampUSD_1-min_data_2012-01-01_to_2019-08-12.csv'
     elif data_type == 'coinbase':
         file_name = 'coinbaseUSD_1-min_data_2014-12-01_to_2019-01-09.csv'
-    else:
-        return
+    elif data_type == 'nyse':
+        file_name = 'prices-split-adjusted'
 
-    file_path = os.path.join(CACHE_DIR, f'{file_name}.msgpack')
-    print(f'file path is {file_path}')
-    df = pd.read_msgpack(file_path)
+    if data_type == 'nyse':
+        file_path = os.path.join(DATA_DIR, f'{file_name}.csv')
+        df = pd.read_csv(file_path)
+        df['return'] = (df['close'] / df['open']) - 1
+    else:
+        file_path = os.path.join(CACHE_DIR, f'{file_name}.msgpack')
+        df = pd.read_msgpack(file_path)
+
+    print(f'Data loaded from {file_path}')
+
     if sample < 1:
         df_sample = df.sample(frac=sample, random_state=42)
     elif sample == 1:
