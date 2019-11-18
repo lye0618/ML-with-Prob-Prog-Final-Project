@@ -25,7 +25,7 @@ class GMM(object):
     # Set device to CPU
     device = torch.device('cpu')
 
-    def __init__(self, n_comp=10, infr='svi'):
+    def __init__(self, n_comp=10, infr='svi', subsample=False):
         assert infr == 'svi' or infr == 'mcmc', 'Only svi and mcmc supported'
         # Load data
         # df = read_data(data_type='nyse')
@@ -51,8 +51,11 @@ class GMM(object):
             self.num_samples = 250
             self.mcmc = None
             self.warmup_steps = 50
-            self.mcmc_subsample = 0.1
-            self.n_obs = int(self.shape[0] * self.mcmc_subsample)
+            if subsample:
+                self.mcmc_subsample = 0.1
+                self.n_obs = int(self.shape[0] * self.mcmc_subsample)
+            else:
+                self.n_obs = self.shape[0]
             # Need to subsample in numpy array because
             # sampling using multinomial takes ages
             # self.tensor = torch.from_numpy(np.random.choice(data, self.n_obs)).type(torch.FloatTensor)
@@ -92,8 +95,9 @@ class GMM(object):
         with pyro.plate('data', self.shape[0]):
             # Local variables.
             assignment = pyro.sample('assignment', dist.Categorical(weights))
-            pyro.sample('obs', dist.MultivariateNormal(locs[assignment], scale),
+            y = pyro.sample('obs', dist.MultivariateNormal(locs[assignment], scale),
                         obs=self.tensor)
+            return y
 
 
     ##################
