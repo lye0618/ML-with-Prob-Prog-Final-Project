@@ -16,17 +16,16 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-import BNN_helper as BNN
+import BNN_helper_upd as BNN
 
 np.random.seed(0)
-
 
 """
 #Test classification networks
 
 X = np.random.normal(size=(1000,10))
 
-Y = np.floor(5*np.random.rand(1000,1)).astype('int')
+Y = np.floor(5*np.random.rand(1000,)).astype('int')
 
 n_inputs = 10
 n_hiddens =[10]
@@ -35,18 +34,18 @@ activ_func =F.relu
 
 clf_net = BNN.BNN_CLF(n_inputs, n_hiddens, n_classes, activ_func)
 
-clf_net.Inference(torch.from_numpy(X).float(),torch.from_numpy(Y).float())
+clf_net.Inference(torch.from_numpy(X).float(),torch.from_numpy(Y).float(), n_epochs=1000)
 
-yhat, yhat_mean = clf_net.predict(torch.from_numpy(X).float(), n_samples=100)
-
+yhat, yhat_mean, yhat_std = clf_net.predict(torch.from_numpy(X).float(), n_samples=100)
 """
+
 
 
 #Test Regression networks
 
 X = np.random.normal(size=(1000,10))
 
-Y = np.random.normal(size=(1000,1))
+Y = np.random.normal(size=(1000,))
 
 n_inputs = 10
 n_hiddens =[10]
@@ -54,6 +53,8 @@ activ_func = F.relu
 
 reg_net = BNN.BNN_REG(n_inputs, n_hiddens, activ_func)
 
-reg_net.Inference(torch.from_numpy(X).float(),torch.from_numpy(Y).float())
+reg_net.Inference(torch.from_numpy(X).float(),torch.from_numpy(Y).float(), n_epochs=1000)
 
-yhat, yhat_mean = reg_net.predict(torch.from_numpy(X).float(), n_samples=100)
+reg_net.get_para()
+
+yhat, yhat_mean, yhat_std = reg_net.predict(torch.from_numpy(X).float(), n_samples=100)
