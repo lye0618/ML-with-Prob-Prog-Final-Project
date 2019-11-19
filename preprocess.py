@@ -4,7 +4,7 @@ import torch
 
 
 def preprocess():
-  data = pd.read_csv("/data_fund.csv")
+  data = pd.read_csv("/mnt/d/mlpp/nyse/data_fund.csv")
   fun = data.loc[~data['Indicator Name'].isin(['Common Shares Outstanding','Share Price'])].reset_index(drop=True)
   fun['yyyymm']=pd.to_datetime(fun['publish date'])
   fun = pd.pivot_table(fun, values='Indicator Value', index=['Ticker', 'yyyymm'],columns=['Indicator Name'], aggfunc=np.mean).reset_index()
