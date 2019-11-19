@@ -12,13 +12,14 @@ def preprocess():
   to_remove = ['Ticker','yyyymm','Avg. Basic Shares Outstanding','Avg. Diluted Shares Outstanding','Total Assets']
   to_remove2 = ['COGS', 'EBIT', 'Cash From Operating Activities', 'Cash and Cash Equivalents',
                'Net Profit', 'Equity Before Minorities', 'Total Noncurrent Liabilities', 'Total Equity',
-               'Total Noncurrent Assets', 'Retained Earnings']
+               'Total Noncurrent Assets', 'Retained Earnings','Net Income from Discontinued Op.','Preferred Equity','Share Capital','Intangible Assets']
   to_remove = to_remove + to_remove2
   fun_cols = list(fun.drop(columns=to_remove).columns)
   # for elem in to_remove:
   #   fun_cols.remove(elem)
 
   fun[fun_cols] = fun[fun_cols].div(fun['Total Assets'], axis=0).reset_index(drop=True)
+
 
   features = fun[fun_cols+['yyyymm','Ticker']]
   features = features.dropna().reset_index(drop=True)
@@ -38,12 +39,16 @@ def preprocess():
   rtns['Rtn1d'] = rtns.groupby('Ticker')['Price'].apply(lambda x: np.log(x).diff())
   rtns['Rtn1q'] = rtns.groupby('Ticker')['Rtn1d'].rolling(63).sum().shift(-63).reset_index(0,drop=True)
   rtns['Rtn1d'] = rtns.groupby('Ticker')['Rtn1d'].shift(-1).reset_index(0,drop=True)
+  rtns['pmom'] = rtns.groupby('Ticker')['Rtn1d'].rolling(63).sum().reset_index(0,drop=True)
   rtns.dropna(inplace=True)
   
+
   final = final.merge(rtns, left_on=['Ticker','yyyymm'], right_on =['Ticker','Date'],how='inner').reset_index(0,drop=True)
   final.dropna(inplace=True)
   train = final[final['yyyymm']<='2016-12-31'].reset_index(0,drop=True)
   test = final[final['yyyymm']>'2016-12-31'].reset_index(0,drop=True)
+  
+  fun_cols = fun_cols + ['pmom']
 
   X_train = train[fun_cols].values
   y_train = train['Rtn1q'].values
