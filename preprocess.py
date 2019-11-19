@@ -1,23 +1,7 @@
-import os
-from functools import partial
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import torch
-import torch.nn as nn
-import math
 
-import matplotlib.pyplot as plt
-
-import pyro
-from pyro.distributions import Normal, Uniform, Delta
-from pyro.infer import SVI, Trace_ELBO
-from pyro.optim import Adam
-from pyro.distributions.util import logsumexp
-from pyro.infer import EmpiricalMarginal, SVI, Trace_ELBO, TracePredictive
-from pyro.infer.mcmc import MCMC, NUTS
-import pyro.optim as optim
-import pyro.poutine as poutine
 
 def preprocess():
   data = pd.read_csv("/data_fund.csv")
@@ -26,9 +10,13 @@ def preprocess():
   fun = pd.pivot_table(fun, values='Indicator Value', index=['Ticker', 'yyyymm'],columns=['Indicator Name'], aggfunc=np.mean).reset_index()
 
   to_remove = ['Ticker','yyyymm','Avg. Basic Shares Outstanding','Avg. Diluted Shares Outstanding','Total Assets']
-  fun_cols = list(fun.columns)
-  for elem in to_remove:
-    fun_cols.remove(elem)
+  to_remove2 = ['COGS', 'EBIT', 'Cash From Operating Activities', 'Cash and Cash Equivalents',
+               'Net Profit', 'Equity Before Minorities', 'Total Noncurrent Liabilities', 'Total Equity',
+               'Total Noncurrent Assets', 'Retained Earnings']
+  to_remove = to_remove + to_remove2
+  fun_cols = list(fun.drop(columns=to_remove).columns)
+  # for elem in to_remove:
+  #   fun_cols.remove(elem)
 
   fun[fun_cols] = fun[fun_cols].div(fun['Total Assets'], axis=0).reset_index(drop=True)
 
