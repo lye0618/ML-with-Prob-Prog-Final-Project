@@ -1,12 +1,18 @@
 import numpy as np
 import pandas as pd
 import torch
+from datetime import datetime, timedelta
 
 
 def preprocess():
   data = pd.read_csv("/data_fund.csv")
   fun = data.loc[~data['Indicator Name'].isin(['Common Shares Outstanding','Share Price'])].reset_index(drop=True)
+
   fun['yyyymm']=pd.to_datetime(fun['publish date'])
+  fun['yearmonth'] =  fun['yyyymm'].map(lambda x: 100*x.year + x.month)
+  fun = fun.groupby(['Ticker','yearmonth','Indicator Name','SimFin ID','Company Industry Classification Code'])['Indicator Value'].mean().reset_index()
+  fun['yyyymm'] = fun['yearmonth'].map(lambda x:datetime(int(str(x)[:4]), int(str(x)[4:6]), 1)-timedelta(days=1))
+  fun['yyyymm'] = pd.to_datetime(fun['yyyymm'])
   fun = pd.pivot_table(fun, values='Indicator Value', index=['Ticker', 'yyyymm'],columns=['Indicator Name'], aggfunc=np.mean).reset_index()
 
   to_remove = ['Ticker','yyyymm','Avg. Basic Shares Outstanding','Avg. Diluted Shares Outstanding','Total Assets']
