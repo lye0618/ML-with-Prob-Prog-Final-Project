@@ -17,7 +17,7 @@ from pyro.optim import Adam
 from pyro.infer import EmpiricalMarginal, SVI, TraceEnum_ELBO, config_enumerate, infer_discrete
 from pyro.infer.autoguide.initialization import init_to_mean
 from loader import read_data
-from preprocessing import X_data
+from preprocess import preprocess
 
 
 class GMM(object):
@@ -29,11 +29,12 @@ class GMM(object):
         assert infr == 'svi' or infr == 'mcmc', 'Only svi and mcmc supported'
         # Load data
         # df = read_data(data_type='nyse')
-        data = X_data
-        self.tensor = data.type(torch.FloatTensor)
+        data_train, _, data_test, _ = preprocess()
+        self.tensor_train = data_train.type(torch.FloatTensor)
+        self.tensor_test = data_test.type(torch.FloatTensor)
         self.n_comp = n_comp
         self.infr = infr
-        self.shape = self.tensor.shape
+        self.shape = self.tensor_train.shape
         self.params = None
         self.weights = None
         self.locs = None
@@ -86,7 +87,7 @@ class GMM(object):
         with pyro.plate('data', self.shape[0]):
             # Local variables.
             assignment = pyro.sample('assignment', dist.Categorical(weights))
-            pyro.sample('obs', dist.MultivariateNormal(locs[assignment], f[assignment]), obs=self.tensor)
+            pyro.sample('obs', dist.MultivariateNormal(locs[assignment], f[assignment]), obs=self.tensor_train)
 
     ##################
     # SVI
@@ -235,7 +236,7 @@ class GMM(object):
             lis.append(t)
         f = torch.stack(lis)
         distri = dist.MultivariateNormal(l, f)
-        for d in self.tensor:
+        for d in self.tensor_test:
             numerator = w * torch.exp(distri.log_prob(d))
             denom = numerator.sum()
             probs = numerator / denom
