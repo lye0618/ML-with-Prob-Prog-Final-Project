@@ -13,7 +13,8 @@ from torch import nn
 import torch.nn.functional as F
 
 import pyro
-from pyro.distributions import Normal, Categorical, Uniform
+from pyro.distributions import Normal, Categorical, Uniform, Gamma, LogNormal
+from   torch.distributions import constraints
 from pyro.infer import SVI, Trace_ELBO
 from pyro.optim import Adam
 
@@ -180,7 +181,10 @@ class BNN_REG(object):
         model_sample = lifted_module()
         
         out_sigma = pyro.sample("sigma", Uniform(0., 10.))
-    
+        
+        #precision = pyro.sample("precision", Uniform(0., 10.))
+        #out_sigma = 1 / precision
+        
         with pyro.plate("data", len(target)):
             
             target_mean = model_sample(features).squeeze(-1)
@@ -207,8 +211,15 @@ class BNN_REG(object):
         # lift module parameters to random variables sampled from the priors
         lifted_module = pyro.random_module("module", self.net, self.est_priors)
         
-        sigma_loc = F.softplus(pyro.param('sigma_loc', torch.randn(1)))
-        out_sigma = pyro.sample("sigma", Normal(sigma_loc, torch.tensor(0.05)))
+        sigma_loc = pyro.param('sigma_loc', torch.randn(1))
+        out_sigma = pyro.sample("sigma", LogNormal(sigma_loc, torch.tensor(0.05)))
+        #sigma_loc = F.softplus(pyro.param('sigma_loc', torch.randn(1)))
+        #out_sigma = pyro.sample("sigma", Normal(sigma_loc, torch.tensor(0.1)))
+        #print("out_sigma", out_sigma)
+        
+        #alpha = pyro.param("alpha", torch.tensor(5.0), constraint = constraints.positive)
+        #beta  = pyro.param("beta", torch.tensor(0.5), constraint = constraints.positive)
+        #precision = pyro.sample("precision", Gamma(alpha, beta))
         
         return lifted_module()
     
@@ -237,8 +248,9 @@ class BNN_REG(object):
                 Y_data_minibatch = Y_data_i[i*batch_size:(i+1)*batch_size]
                 
                 loss = self.svi.step(X_data_minibatch, Y_data_minibatch)
-                
                 total_loss += loss / num_examples
+            
+            #total_loss = self.svi.evaluate_loss(X_data_i, Y_data_i)
             
             print(f'Epoch {epoch+1} : Loss {total_loss}')
     
