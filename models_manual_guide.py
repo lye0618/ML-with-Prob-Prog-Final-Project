@@ -2,7 +2,6 @@
 from collections import defaultdict
 import time
 import matplotlib.pyplot as plt
-import numpy as np
 
 import torch
 from torch.distributions import constraints
@@ -10,18 +9,17 @@ from torch.distributions import constraints
 import pyro
 import pyro.distributions as dist
 from pyro import poutine
-from pyro.infer.autoguide import AutoDelta, AutoDiagonalNormal, AutoMultivariateNormal
+from pyro.infer.autoguide import (AutoDelta, AutoDiagonalNormal,
+                                  AutoMultivariateNormal)
 from pyro.infer.mcmc.api import MCMC
 from pyro.infer.mcmc import NUTS
 from pyro.optim import Adam
-from pyro.infer import EmpiricalMarginal, SVI, TraceEnum_ELBO, config_enumerate, infer_discrete
-from pyro.infer.autoguide.initialization import init_to_mean
-from loader import read_data
+from pyro.infer import (EmpiricalMarginal, SVI, TraceEnum_ELBO,
+                        config_enumerate)
 from preprocess import preprocess
 
 
 class GMM(object):
-
     # Set device to CPU
     device = torch.device('cpu')
 
@@ -61,7 +59,8 @@ class GMM(object):
                 self.n_obs = self.shape[0]
             # Need to subsample in numpy array because
             # sampling using multinomial takes ages
-            # self.tensor = torch.from_numpy(np.random.choice(data, self.n_obs)).type(torch.FloatTensor)
+            # self.tensor = torch.from_numpy(np.random.choice(data, self.n_obs)
+            #                                ).type(torch.FloatTensor)
 
         # Initialize model
         self.model()
@@ -72,10 +71,15 @@ class GMM(object):
     @config_enumerate
     def model(self):
         # Global variables
-        weights = pyro.sample('weights', dist.Dirichlet(0.5 * torch.ones(self.n_comp)))
+        weights = pyro.sample('weights',
+                              dist.Dirichlet(0.5 * torch.ones(self.n_comp)))
 
         with pyro.plate('components', self.n_comp):
-            locs = pyro.sample('locs', dist.MultivariateNormal(torch.zeros(self.shape[1]), torch.eye(self.shape[1])))
+            locs = pyro.sample('locs',
+                               dist.MultivariateNormal(
+                                   torch.zeros(self.shape[1]),
+                                   torch.eye(self.shape[1]))
+                               )
             scale = pyro.sample('scale', dist.LogNormal(0., 2.))
 
         lis = []
@@ -87,38 +91,64 @@ class GMM(object):
         with pyro.plate('data', self.shape[0]):
             # Local variables.
             assignment = pyro.sample('assignment', dist.Categorical(weights))
-            pyro.sample('obs', dist.MultivariateNormal(locs[assignment], f[assignment]), obs=self.tensor_train)
+            pyro.sample('obs', dist.MultivariateNormal(locs[assignment],
+                                                       f[assignment]),
+                        obs=self.tensor_train)
 
     ##################
     # SVI
     ##################
     def guide_autodelta(self):
-        self.guide = AutoDelta(poutine.block(self.model, expose=['weights', 'locs', 'scale']))
-                               # init_loc_fn=init_to_mean)
+        self.guide = AutoDelta(poutine.block(self.model,
+                                             expose=['weights',
+                                                     'locs',
+                                                     'scale']))
 
     def guide_autodiagnorm(self):
-        self.guide = AutoDiagonalNormal(poutine.block(self.model, expose=['weights', 'locs', 'scale']))
+        self.guide = AutoDiagonalNormal(poutine.block(self.model,
+                                                      expose=['weights',
+                                                              'locs',
+                                                              'scale']))
 
     def guide_multivariatenormal(self):
-        self.guide = AutoMultivariateNormal(poutine.block(self.model, expose=['weights', 'locs', 'scale']))
+        self.guide = AutoMultivariateNormal(poutine.block(self.model,
+                                                          expose=['weights',
+                                                                  'locs',
+                                                                  'scale']))
 
     def guide_manual(self):
         # Define priors
-        weights_alpha = pyro.param('weights_alpha', (1./self.n_comp) * torch.ones(self.n_comp), constraint=constraints.simplex)
-        scale_loc = pyro.param('scale_loc', torch.rand(1).expand([self.n_comp]), constraint=constraints.positive)
-        scale_scale = pyro.param('scale_scale', torch.rand(1), constraint=constraints.positive)
-        loc_loc = pyro.param('loc_loc', torch.zeros(self.shape[1]), constraint=constraints.positive)
-        loc_scale = pyro.param('loc_scale', torch.ones(1), constraint=constraints.positive)
+        weights_alpha = pyro.param('weights_alpha',
+                                   (1. / self.n_comp) * torch.ones(
+                                       self.n_comp),
+                                   constraint=constraints.simplex)
+        scale_loc = pyro.param('scale_loc',
+                               torch.rand(1).expand([self.n_comp]),
+                               constraint=constraints.positive)
+        scale_scale = pyro.param('scale_scale',
+                                 torch.rand(1),
+                                 constraint=constraints.positive)
+        loc_loc = pyro.param('loc_loc',
+                             torch.zeros(self.shape[1]),
+                             constraint=constraints.positive)
+        loc_scale = pyro.param('loc_scale',
+                               torch.ones(1),
+                               constraint=constraints.positive)
 
         # Global variables
         weights = pyro.sample('weights', dist.Dirichlet(weights_alpha))
         with pyro.plate('components', self.n_comp):
-            locs = pyro.sample('locs', dist.MultivariateNormal(loc_loc, torch.eye(self.shape[1]) * loc_scale))
-            scale = pyro.sample('scale', dist.LogNormal(scale_loc, scale_scale))
+            locs = pyro.sample('locs',
+                               dist.MultivariateNormal(loc_loc, torch.eye(
+                                   self.shape[1]) * loc_scale))
+            scale = pyro.sample('scale',
+                                dist.LogNormal(scale_loc, scale_scale))
 
         with pyro.plate('data', self.shape[0]):
             # Local variables.
             assignment = pyro.sample('assignment', dist.Categorical(weights))
+
+        return locs, scale, assignment
 
     def optimizer(self):
         self.optim = pyro.optim.Adam({'lr': 0.1, 'betas': [0.8, 0.99]})
@@ -152,8 +182,9 @@ class GMM(object):
 
     def register_params(self):
         gradient_norms = defaultdict(list)
-        for name, value in self.params.named_parameters():
-            value.register_hook(lambda g, name=name: gradient_norms[name].append(g.norm().item()))
+        for nam, value in self.params.named_parameters():
+            value.register_hook(lambda g, name=nam: gradient_norms[nam].
+                                append(g.norm().item()))
 
     def get_svi_estimates_auto_guide(self):
         estimates = self.guide()
@@ -166,12 +197,15 @@ class GMM(object):
         svi_posterior = self.svi.run()
 
         sites = ["weights", "scale", "locs"]
-        svi_samples = {site: EmpiricalMarginal(svi_posterior, sites=site).enumerate_support().detach().cpu().numpy()
-                       for site in sites}
+        svi_samples = {
+            site: EmpiricalMarginal(svi_posterior, sites=site).
+            enumerate_support().detach().cpu().numpy() for site in sites
+        }
 
         self.posterior_est = dict()
         for item in svi_samples.keys():
-            self.posterior_est[item] = torch.tensor(svi_samples[item].mean(axis=0))
+            self.posterior_est[item] = torch.tensor(
+                svi_samples[item].mean(axis=0))
 
         return self.posterior_est
 
@@ -181,7 +215,8 @@ class GMM(object):
     def init_mcmc(self, seed=42):
         self.set_seed(seed)
         kernel = NUTS(self.model)
-        self.mcmc = MCMC(kernel, num_samples=self.num_samples, warmup_steps=self.warmup_steps)
+        self.mcmc = MCMC(kernel, num_samples=self.num_samples,
+                         warmup_steps=self.warmup_steps)
         print("Initialized MCMC with NUTS kernal")
 
     def run_mcmc(self):
@@ -227,7 +262,7 @@ class GMM(object):
         p(c=k|x) = w_k * N(x|mu_k, sigma_k) / sum(w_k * N(x|mu_k, sigma_k))
         '''
         w = self.posterior_est['weights']
-        l = self.posterior_est['locs']
+        lo = self.posterior_est['locs']
         s = self.posterior_est['scale']
         prob_list = []
         lis = []
@@ -235,7 +270,7 @@ class GMM(object):
             t = torch.eye(self.shape[1]) * s[i]
             lis.append(t)
         f = torch.stack(lis)
-        distri = dist.MultivariateNormal(l, f)
+        distri = dist.MultivariateNormal(lo, f)
         for d in self.tensor_test:
             numerator = w * torch.exp(distri.log_prob(d))
             denom = numerator.sum()
@@ -258,10 +293,11 @@ class GMM(object):
             svi_stats = None
 
         if self.mcmc is not None:
-            mcmc_stats = dict({'num_samples': self.shape[0]*self.mcmc_subsample,
-                               'exec_time': self.mcmc_time,
-                               'num_samples_generated': self.num_samples,
-                               'warmup_steps': self.warmup_steps})
+            mcmc_stats = dict(
+                {'num_sampl': self.shape[0] * self.mcmc_subsample,
+                 'exec_time': self.mcmc_time,
+                 'num_samples_generated': self.num_samples,
+                 'warmup_steps': self.warmup_steps})
         else:
             mcmc_stats = None
 

@@ -1,6 +1,4 @@
 import pyro
-import pyro.distributions as dist
-import pyro
 import torch
 
 from models_manual_guide import GMM
@@ -20,13 +18,14 @@ def run_gmm(n_comp=11):
     print(f'size of train tensor: {svi.tensor_train.shape}')
     print(f'size of test tensor: {svi.tensor_test.shape}')
     print('number of iterations 1000')
-    svi.svi_itr = 1000
+    svi.svi_itr = 10
     loss = svi.inference()
     svi.plot_svi_convergence(loss)
     print('\n losses stored in variable loss')
 
     samples = svi.get_mean_svi_est_manual_guide()
-    print(f'posterior samples stored in variable samples')
+    print(f'posterior samples stored in '
+          f'variable samples with shape {len(samples)}')
 
     resps = svi.get_posterior_resp()
     print('posterior probabilities stored in variable resps')
@@ -41,4 +40,3 @@ def run_gmm(n_comp=11):
     print('Indexes for test tensor stored in variable nl_idx')
 
     return resps, nl_idx
-
