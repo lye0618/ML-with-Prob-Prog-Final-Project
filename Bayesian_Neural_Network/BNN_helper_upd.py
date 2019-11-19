@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 24 22:42:24 2019
+Created on Mon Nov 18 09:21:49 2019
 
 @author: linye
 """
@@ -19,7 +19,7 @@ from pyro.optim import Adam
 
 import pyro.poutine as poutine
 
-pyro.enable_validation(True)
+pyro.enable_validation(True) #check log_prob (to_event) shape is correct or not
 
 
 class NN(nn.Module):
@@ -28,16 +28,8 @@ class NN(nn.Module):
         
         super(NN, self).__init__()
         
-        #self.fc_layers = {}
-        
         self.hidden_sizes = hidden_sizes
         self.activ_func = activ_func
-        
-        #self.fc_layers['h0'] = nn.Linear(input_size, hidden_sizes[0])
-        
-        #for i in range(len(hidden_sizes)-1):
-            
-            #self.fc_layers['h'+str(i+1)] = nn.Linear(hidden_sizes[i], hidden_sizes[i+1])
         
         setattr(self, 'h0', nn.Linear(input_size, hidden_sizes[0]))
         
@@ -69,18 +61,22 @@ class BNN_CLF(object):
         
         self.net = NN(n_inputs, n_hiddens, n_classes, activ_func)
         
-        self.log_softmax = nn.LogSoftmax(dim=1)
+        #self.log_softmax = nn.LogSoftmax(dim=1)
+        self.softmax = nn.Softmax(dim=1)
         
     def model(self, features, target):
+        
+        def normal_prior(x):
+            return Normal(torch.zeros_like(x), torch.ones_like(x)).to_event(x.dim())
         
         self.priors = {}
         
         for i in range(len(self.net.hidden_sizes)):
-            self.priors['h'+str(i)+'.weight'] = Normal(loc=torch.zeros_like(getattr(self.net,'h'+str(i)).weight), scale=torch.ones_like(getattr(self.net,'h'+str(i)).weight)).to_event(2)
-            self.priors['h'+str(i)+'.bias'] = Normal(loc=torch.zeros_like(getattr(self.net,'h'+str(i)).bias), scale=torch.ones_like(getattr(self.net,'h'+str(i)).bias)).to_event(1)
-        
-        self.priors['out'+'.weight'] = Normal(loc=torch.zeros_like(self.net.out.weight), scale=torch.ones_like(self.net.out.weight)).to_event(2)
-        self.priors['out'+'.bias'] = Normal(loc=torch.zeros_like(self.net.out.bias), scale=torch.ones_like(self.net.out.bias)).to_event(1)
+            self.priors['h'+str(i)+'.weight'] = normal_prior(getattr(self.net,'h'+str(i)).weight)
+            self.priors['h'+str(i)+'.bias'] = normal_prior(getattr(self.net,'h'+str(i)).bias)
+            
+        self.priors['out'+'.weight'] = normal_prior(self.net.out.weight)
+        self.priors['out'+'.bias'] = normal_prior(self.net.out.bias)
         
         # lift module parameters to random variables sampled from the priors
         lifted_module = pyro.random_module("module", self.net, self.priors)
@@ -90,28 +86,29 @@ class BNN_CLF(object):
         
         with pyro.plate("data", len(target)):
             
-            yhat = self.log_softmax(model_sample(features))
-            pyro.sample("obs", Categorical(logits=yhat), obs=target) #target is not one-hot encoded
+            #yhat = self.log_softmax(model_sample(features))
+            #pyro.sample("obs", Categorical(logits=yhat), obs=target) #target is not one-hot encoded
+            
+            yhat = self.softmax(model_sample(features))
+            pyro.sample("obs", Categorical(probs=yhat), obs=target) #target is not one-hot encoded
+            
+            return yhat
     
     def guide(self, features, target):
+        
+        def normal_posterior(x, name):
+            hw_mu = pyro.param(name + 'mu', torch.randn_like(x))
+            hw_sigma = F.softplus(pyro.param(name + 'sigma', torch.randn_like(x)))
+            return Normal(loc=hw_mu, scale=hw_sigma).to_event(x.dim())
         
         self.est_priors = {}
         
         for i in range(len(self.net.hidden_sizes)):
-            hw_mu = pyro.param('h'+str(i)+'_w_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).weight))
-            hw_sigma = F.softplus(pyro.param('h'+str(i)+'_w_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).weight)))
-            self.est_priors['h'+str(i)+'.weight'] = Normal(loc=hw_mu, scale=hw_sigma).to_event(2)
-            hb_mu = pyro.param('h'+str(i)+'_b_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).bias))
-            hb_sigma = F.softplus(pyro.param('h'+str(i)+'_b_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).bias)))
-            self.est_priors['h'+str(i)+'.bias'] = Normal(loc=hb_mu, scale=hb_sigma).to_event(1)
+            self.est_priors['h'+str(i)+'.weight'] = normal_posterior(getattr(self.net,'h'+str(i)).weight, 'h'+str(i)+'_w_')
+            self.est_priors['h'+str(i)+'.bias'] = normal_posterior(getattr(self.net,'h'+str(i)).bias, 'h'+str(i)+'_b_')
         
-        outw_mu = pyro.param('out'+'_w_' + 'mu', torch.randn_like(self.net.out.weight))
-        outw_sigma = F.softplus(pyro.param('out'+'_w_' + 'sigma', torch.randn_like(self.net.out.weight)))
-        self.est_priors['out'+'.weight'] = Normal(loc=outw_mu, scale=outw_sigma).to_event(2)
-        
-        outb_mu = pyro.param('out'+'_b_' + 'mu', torch.randn_like(self.net.out.bias))
-        outb_sigma = F.softplus(pyro.param('out'+'_b_' + 'sigma', torch.randn_like(self.net.out.bias)))
-        self.est_priors['out'+'.bias'] = Normal(loc=outb_mu, scale=outb_sigma).to_event(1)
+        self.est_priors['out'+'.weight'] = normal_posterior(self.net.out.weight, 'out'+'_w_')
+        self.est_priors['out'+'.bias'] = normal_posterior(self.net.out.bias, 'out'+'_b_')
         
         # lift module parameters to random variables sampled from the priors
         lifted_module = pyro.random_module("module", self.net, self.est_priors)
@@ -149,9 +146,10 @@ class BNN_CLF(object):
     def predict(self, X_data, n_samples):
         
         sampled_models = [self.guide(None, None) for _ in range(n_samples)]
-        yhats = [model(X_data).data for model in sampled_models]
-        mean = torch.mean(torch.stack(yhats), 0)
-        return yhats, torch.argmax(mean, dim=1)
+        yhats = torch.stack([self.softmax(model(X_data)).data for model in sampled_models], dim=0) #shape [num_samples, num_models]
+        mean = torch.mean(yhats, dim=0)
+        std = torch.std(yhats, dim=0)
+        return yhats.numpy(), mean.numpy(), std.numpy()
     
 class BNN_REG(object):
     
@@ -164,14 +162,17 @@ class BNN_REG(object):
     
     def model(self, features, target):
         
+        def normal_prior(x):
+            return Normal(torch.zeros_like(x), torch.ones_like(x)).to_event(x.dim())
+        
         self.priors = {}
         
         for i in range(len(self.net.hidden_sizes)):
-            self.priors['h'+str(i)+'.weight'] = Normal(loc=torch.zeros_like(getattr(self.net,'h'+str(i)).weight), scale=torch.ones_like(getattr(self.net,'h'+str(i)).weight)).to_event(2)
-            self.priors['h'+str(i)+'.bias'] = Normal(loc=torch.zeros_like(getattr(self.net,'h'+str(i)).bias), scale=torch.ones_like(getattr(self.net,'h'+str(i)).bias)).to_event(1)
-        
-        self.priors['out'+'.weight'] = Normal(loc=torch.zeros_like(self.net.out.weight), scale=torch.ones_like(self.net.out.weight)).to_event(2)
-        self.priors['out'+'.bias'] = Normal(loc=torch.zeros_like(self.net.out.bias), scale=torch.ones_like(self.net.out.bias)).to_event(1)
+            self.priors['h'+str(i)+'.weight'] = normal_prior(getattr(self.net,'h'+str(i)).weight)
+            self.priors['h'+str(i)+'.bias'] = normal_prior(getattr(self.net,'h'+str(i)).bias)
+            
+        self.priors['out'+'.weight'] = normal_prior(self.net.out.weight)
+        self.priors['out'+'.bias'] = normal_prior(self.net.out.bias)
         
         # lift module parameters to random variables sampled from the priors
         lifted_module = pyro.random_module("module", self.net, self.priors)
@@ -189,23 +190,19 @@ class BNN_REG(object):
     
     def guide(self, features, target):
         
+        def normal_posterior(x, name):
+            hw_mu = pyro.param(name + 'mu', torch.randn_like(x))
+            hw_sigma = F.softplus(pyro.param(name + 'sigma', torch.randn_like(x)))
+            return Normal(loc=hw_mu, scale=hw_sigma).to_event(x.dim())
+        
         self.est_priors = {}
         
         for i in range(len(self.net.hidden_sizes)):
-            mu = pyro.param('h'+str(i)+'_w_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).weight))
-            sigma = F.softplus(pyro.param('h'+str(i)+'_w_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).weight)))
-            self.est_priors['h'+str(i)+'.weight'] = Normal(loc=mu, scale=sigma).to_event(2)
-            hb_mu = pyro.param('h'+str(i)+'_b_' + 'mu', torch.randn_like(getattr(self.net,'h'+str(i)).bias))
-            hb_sigma = F.softplus(pyro.param('h'+str(i)+'_b_' + 'sigma', torch.randn_like(getattr(self.net,'h'+str(i)).bias)))
-            self.est_priors['h'+str(i)+'.bias'] = Normal(loc=hb_mu, scale=hb_sigma).to_event(1)
+            self.est_priors['h'+str(i)+'.weight'] = normal_posterior(getattr(self.net,'h'+str(i)).weight, 'h'+str(i)+'_w_')
+            self.est_priors['h'+str(i)+'.bias'] = normal_posterior(getattr(self.net,'h'+str(i)).bias, 'h'+str(i)+'_b_')
         
-        outw_mu = pyro.param('out'+'_w_' + 'mu', torch.randn_like(self.net.out.weight))
-        outw_sigma = F.softplus(pyro.param('out'+'_w_' + 'sigma', torch.randn_like(self.net.out.weight)))
-        self.est_priors['out'+'.weight'] = Normal(loc=outw_mu, scale=outw_sigma).to_event(2)
-        
-        outb_mu = pyro.param('out'+'_b_' + 'mu', torch.randn_like(self.net.out.bias))
-        outb_sigma = F.softplus(pyro.param('out'+'_b_' + 'sigma', torch.randn_like(self.net.out.bias)))
-        self.est_priors['out'+'.bias'] = Normal(loc=outb_mu, scale=outb_sigma).to_event(1)
+        self.est_priors['out'+'.weight'] = normal_posterior(self.net.out.weight, 'out'+'_w_')
+        self.est_priors['out'+'.bias'] = normal_posterior(self.net.out.bias, 'out'+'_b_')
         
         # lift module parameters to random variables sampled from the priors
         lifted_module = pyro.random_module("module", self.net, self.est_priors)
@@ -219,6 +216,8 @@ class BNN_REG(object):
         
         self.optim = optimizer({"lr": lr})
         self.svi = SVI(self.model, self.guide, self.optim, loss=loss)
+        
+        pyro.clear_param_store() #clear trained parameters
         
         num_examples = len(X_data)
         
@@ -243,9 +242,14 @@ class BNN_REG(object):
             
             print(f'Epoch {epoch+1} : Loss {total_loss}')
     
+    def get_para(self):
+        for name, value in pyro.get_param_store().items():
+            print(name, pyro.param(name))
+    
     def predict(self, X_data, n_samples):
         
         sampled_models = [self.guide(None, None) for _ in range(n_samples)]
-        yhats = [model(X_data).data for model in sampled_models]
-        mean = torch.mean(torch.stack(yhats), 0)
-        return yhats, mean
+        yhats = torch.cat([model(X_data).data for model in sampled_models], dim=1) #shape [num_samples, num_models]
+        mean = torch.mean(yhats, dim=1)
+        std = torch.std(yhats, dim=1)
+        return yhats.numpy(), mean.numpy(), std.numpy()
