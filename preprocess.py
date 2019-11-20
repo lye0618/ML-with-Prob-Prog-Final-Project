@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 
-def preprocess():
+def preprocess(ret_type):
   data = pd.read_csv("/mnt/d/mlpp/nyse/data_fund.csv")
   fun = data.loc[~data['Indicator Name'].isin(['Common Shares Outstanding','Share Price'])].reset_index(drop=True)
 
@@ -41,6 +41,7 @@ def preprocess():
   data['publish date']=pd.to_datetime(data['publish date'])
   rtns = data.loc[data['Indicator Name']=='Share Price', ['Ticker','publish date','Company Industry Classification Code', 'Indicator Value']].reset_index(drop=True)
   rtns.columns = ['Ticker','Date','Industry','Price']
+  rtns = rtns.groupby(['Ticker','Date','Industry'])['Price'].mean().reset_index()
   # rtns['Rtn1d'] = rtns.groupby('Ticker')['Price'].apply(lambda x: np.log(x).diff())
   # rtns['Rtn1q'] = rtns.groupby('Ticker')['Rtn1d'].rolling(63).sum().reset_index(0,drop=True)
   rtns['Rtn1d'] = rtns.groupby('Ticker')['Price'].apply(lambda x: np.log(x).diff())
@@ -57,13 +58,20 @@ def preprocess():
   
   fun_cols = fun_cols + ['pmom']
 
-  X_train = train[fun_cols].values
-  y_train = train['Rtn1q'].values
-  X_test = test[fun_cols].values
-  y_test = test['Rtn1q'].values
-  X_tr = torch.tensor(X_train, dtype=torch.float)
-  y_tr = torch.tensor(y_train, dtype=torch.float)
-  X_ts = torch.tensor(X_test, dtype=torch.float)
-  y_ts = torch.tensor(y_test, dtype=torch.float)
+  if 'ret_type' == 'tensor':
+    X_train = train[fun_cols].values
+    y_train = train['Rtn1q'].values
+    X_test = test[fun_cols].values
+    y_test = test['Rtn1q'].values
+    X_tr = torch.tensor(X_train, dtype=torch.float)
+    y_tr = torch.tensor(y_train, dtype=torch.float)
+    X_ts = torch.tensor(X_test, dtype=torch.float)
+    y_ts = torch.tensor(y_test, dtype=torch.float)
+
+  elif 'ret_type' == 'df':
+    X_tr = train[fun_cols +['yyyymm','Ticker']]
+    y_tr = train['Rtn1q']
+    X_ts = test[fun_cols +['yyyymm','Ticker']]
+    y_ts = test['Rtn1q']
 
   return X_tr,y_tr,X_ts,y_ts

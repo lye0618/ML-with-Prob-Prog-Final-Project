@@ -23,7 +23,7 @@ from preprocess import preprocess
 
 def get_data():
     print('Loading data')
-    x, y, x_test, y_test = preprocess()
+    x, y, x_test, y_test = preprocess('tensor')
     return x, y, x_test, y_test
 
 
@@ -174,6 +174,9 @@ def plot_losses(rec_loss):
     fig = plt.figure(figsize=(18, 6))
     plt.subplot(131)
     plt.plot(rec_loss)
+    plt.title('Loss Function')
+    plt.xlabel('Iterations')
+    plt.ylabel('-ELBO')
     plt.show()
 
 
