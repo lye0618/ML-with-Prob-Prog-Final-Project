@@ -49,16 +49,16 @@ def preprocess(ret_type):
   rtns['Rtn1q'] = rtns.groupby('Ticker')['Rtn1d'].rolling(63).sum().shift(-63).reset_index(0,drop=True)
   rtns['Rtn1d'] = rtns.groupby('Ticker')['Rtn1d'].shift(-1).reset_index(0,drop=True)
   rtns.dropna(inplace=True)
-  
+
 
   final = final.merge(rtns, left_on=['Ticker','yyyymm'], right_on =['Ticker','Date'],how='inner').reset_index(0,drop=True)
   final.dropna(inplace=True)
   train = final[final['yyyymm']<='2016-12-31'].reset_index(0,drop=True)
   test = final[final['yyyymm']>'2016-12-31'].reset_index(0,drop=True)
-  
+
   fun_cols = fun_cols + ['pmom']
 
-  if 'ret_type' == 'tensor':
+  if ret_type == 'tensor':
     X_train = train[fun_cols].values
     y_train = train['Rtn1q'].values
     X_test = test[fun_cols].values
@@ -68,7 +68,7 @@ def preprocess(ret_type):
     X_ts = torch.tensor(X_test, dtype=torch.float)
     y_ts = torch.tensor(y_test, dtype=torch.float)
 
-  elif 'ret_type' == 'df':
+  elif ret_type == 'df':
     X_tr = train[fun_cols +['yyyymm','Ticker']]
     y_tr = train['Rtn1q']
     X_ts = test[fun_cols +['yyyymm','Ticker']]
