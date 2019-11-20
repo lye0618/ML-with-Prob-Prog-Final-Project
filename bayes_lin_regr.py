@@ -1,20 +1,11 @@
-import os
-from functools import partial
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import torch
-import torch.nn as nn
-import math
-
 import matplotlib.pyplot as plt
 
 import pyro
-from pyro.distributions import Normal, Uniform, Delta, LogNormal
-from pyro.optim import Adam
-from pyro.distributions.util import logsumexp
-from pyro.infer import EmpiricalMarginal, SVI, Trace_ELBO, TracePredictive, config_enumerate
-from pyro.infer.mcmc import MCMC, NUTS
+from pyro.distributions import Normal, LogNormal
+from pyro.infer import (EmpiricalMarginal, config_enumerate)
 import pyro.optim as optim
 from torch.distributions import constraints
 
@@ -23,7 +14,7 @@ from preprocess import preprocess
 
 def get_data():
     print('Loading data')
-    x, y, x_test, y_test = preprocess('tensor')
+    x, y, x_test, y_test = preprocess(ret_type='tensor')
     return x, y, x_test, y_test
 
 
@@ -72,7 +63,7 @@ def model(x, y):
                           Normal(torch.tensor([1.0]), torch.tensor([5.0])))
 
     prediction_mean = b_prior + w_prior1 * x[:, 0] + \
-                      w_prior2 * x[:, 1] + w_prior3 * x[:, 2] + \
+                        w_prior2 * x[:, 1] + w_prior3 * x[:, 2] + \
                       w_prior4 * x[:, 3] + w_prior5 * x[:, 4] + \
                       w_prior6 * x[:, 5] + w_prior7 * x[:, 6] + \
                       w_prior8 * x[:, 7] + w_prior9 * x[:, 8] + \
@@ -163,8 +154,6 @@ def run_svi(itr, x, y):
     for i in range(itr):
         loss = svi.step(x, y)
         rec_loss.append(loss)
-       # if not i % 50:
-       #     print('Iter %d, loss = %g' % (i, loss))
 
     return rec_loss
 
@@ -184,8 +173,10 @@ def summary(samples):
     site_stats = {}
     for site_name, values in samples.items():
         marginal_site = pd.DataFrame(values)
-        describe = marginal_site.describe(percentiles=[.05, 0.25, 0.5, 0.75, 0.95]).transpose()
-        site_stats[site_name] = describe[["mean", "std", "5%", "25%", "50%", "75%", "95%"]]
+        describe = marginal_site.describe(
+            percentiles=[.05, 0.25, 0.5, 0.75, 0.95]).transpose()
+        site_stats[site_name] = describe[
+            ["mean", "std", "5%", "25%", "50%", "75%", "95%"]]
     return site_stats
 
 
@@ -197,8 +188,10 @@ def get_avg_estimates(x, y):
              'w_prior7', 'w_prior8', 'w_prior9', 'w_prior10', 'w_prior11',
              'w_prior12', 'w_prior13', 'w_prior14', 'w_prior15', 'w_prior16',
              'w_prior17', 'w_prior18', 'w_prior19', 'b_prior', 'sigma']
+
     svi_samples = {site: EmpiricalMarginal(estimates,
-                                           sites=site).enumerate_support().detach().cpu().numpy()
+                                           sites=site).enumerate_support()
+                                                      .detach().cpu().numpy()
                    for site in sites}
 
     summ = summary(svi_samples)
