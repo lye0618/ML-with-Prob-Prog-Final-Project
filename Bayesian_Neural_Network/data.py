@@ -50,6 +50,7 @@ def preprocess():
   data['publish date']=pd.to_datetime(data['publish date'])
   rtns = data.loc[data['Indicator Name']=='Share Price', ['Ticker','publish date','Company Industry Classification Code', 'Indicator Value']].reset_index(drop=True)
   rtns.columns = ['Ticker','Date','Industry','Price']
+  rtns['Date'] = pd.to_datetime(rtns['Date'])
   #rtns_new = rtns.groupby(['Date','Ticker'])['Industry','Price'].apply(lambda x: x.mean()).reset_index()
   # rtns['Rtn1d'] = rtns.groupby('Ticker')['Price'].apply(lambda x: np.log(x).diff())
   # rtns['Rtn1q'] = rtns.groupby('Ticker')['Rtn1d'].rolling(63).sum().reset_index(0,drop=True)
@@ -67,16 +68,24 @@ def preprocess():
   
   final['Prtn1q'] = final.groupby('Ticker')['Price'].apply(lambda x: np.log(x).diff())
   final['Rtn1q'] = final.groupby('Ticker')['Prtn1q'].shift(-1)
+  #final['Normal_Rtn1q'] = final.groupby('Date')['Price'].apply(lambda x: np.log(x).diff())
   
   final.dropna(inplace=True)
   
-  model_cols = ['Ticker','Date'] + fun_cols + ['Prtn1q','Rtn1q']
-  backtest_cols = ['Ticker','Date','Industry','Rtn1q']
+  #final['Prtn1q'] = final.groupby('Date')['Prtn1q'].transform(lambda x: (x - x.mean()) / x.std())
+  #final['Normal_Rtn1q'] = final.groupby('Ticker')['Prtn1q'].shift(-1)
   
-  return final, final[model_cols], final[backtest_cols], 
+  #final.dropna(inplace=True)
+  
+  #final.set_index('Date',inplace=True)
+  
+  model_cols = ['Date','Ticker','Industry'] + fun_cols + ['Prtn1q','Rtn1q']
+  backtest_cols = ['Date','Ticker','Industry','Rtn1q']
+  
+  return final, final[model_cols], final[backtest_cols]
 
 
-final, features, rtns = preprocess()
+final, model_data, backtest_data = preprocess()
 
-features.to_csv('model_data.csv',index=False)
-rtns.to_csv('rtns_data.csv',index=False)
+model_data.to_csv('model_data.csv',index=False)
+backtest_data.to_csv('backtest_data.csv',index=False)
