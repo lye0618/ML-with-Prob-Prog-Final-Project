@@ -8,7 +8,7 @@ def run_gmm(n_comp=11, n_itr=100):
     """
     Runs GMM end to end
     :param  n_comp: Number of components in GMM (default = 11)
-            n_itr: Number of iterations
+            n_itr: Number of iterations (default = 100)
 
     :return:    resps = posterior probabilities on test set
                 nl_idx = index of null rows in resps
