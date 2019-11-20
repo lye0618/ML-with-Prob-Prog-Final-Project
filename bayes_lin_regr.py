@@ -23,7 +23,7 @@ from preprocess import preprocess
 
 def get_data():
     print('Loading data')
-    x, y, x_test, y_test = preprocess()
+    x, y, x_test, y_test = preprocess('tensor')
     return x, y, x_test, y_test
 
 
@@ -163,8 +163,8 @@ def run_svi(itr, x, y):
     for i in range(itr):
         loss = svi.step(x, y)
         rec_loss.append(loss)
-        if not i % 50:
-            print('Iter %d, loss = %g' % (i, loss))
+       # if not i % 50:
+       #     print('Iter %d, loss = %g' % (i, loss))
 
     return rec_loss
 
@@ -174,6 +174,9 @@ def plot_losses(rec_loss):
     fig = plt.figure(figsize=(18, 6))
     plt.subplot(131)
     plt.plot(rec_loss)
+    plt.title('Loss Function')
+    plt.xlabel('Iterations')
+    plt.ylabel('-ELBO')
     plt.show()
 
 
