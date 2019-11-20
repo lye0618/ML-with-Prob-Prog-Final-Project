@@ -94,5 +94,8 @@ ENV/
 # Extra
 .DS_Store/
 .DS_Store
+
+Bayesian_Neural_Network/
+temp/
 requirements.in
 mypythonfile.py

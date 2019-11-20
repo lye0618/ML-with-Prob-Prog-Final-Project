@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import torch
 from backtest_helper import Backtest
 
 
@@ -30,8 +29,21 @@ def get_data():
     return backtest_data
 
 
+def merge_with_tix_gics(df_back, lin_preds, x_test):
+    p = lin_preds.squeeze()
+    p = p.numpy()
+    preds2 = pd.Series(p)
+    preds2.rename('alpha', inplace=True)
+    y = pd.concat([x_test, preds2], axis=1)
+    y = y.rename(columns={'yyyymm': 'Date'})
+    y = y.merge(df_back, how='inner', by=['Date', 'Ticker'])
+    y = y[['Date', 'Ticker', 'alpha', 'Industry']]
+
+    assert y.shape == (x_test.shape[0], 4)
+    return y
+
+
 def main(final):
     backtest = Backtest(get_data())
     backtest.set_alpha(final)
     backtest.print_results()
-
