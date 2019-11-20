@@ -263,5 +263,6 @@ class BNN_REG(object):
         sampled_models = [self.guide(None, None) for _ in range(n_samples)]
         yhats = torch.cat([model(X_data).data for model in sampled_models], dim=1) #shape [num_samples, num_models]
         mean = torch.mean(yhats, dim=1)
-        std = torch.std(yhats, dim=1)
-        return yhats.numpy(), mean.numpy(), std.numpy()
+        return mean.numpy()
+        #std = torch.std(yhats, dim=1)
+        #return yhats.numpy(), mean.numpy(), std.numpy()

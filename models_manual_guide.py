@@ -23,7 +23,7 @@ class GMM(object):
     # Set device to CPU
     device = torch.device('cpu')
 
-    def __init__(self, n_comp=3, infr='svi', subsample=False):
+    def __init__(self, n_comp=3, infr='svi', n_itr=100, subsample=False):
         assert infr == 'svi' or infr == 'mcmc', 'Only svi and mcmc supported'
         # Load data
         # df = read_data(data_type='nyse')
@@ -44,7 +44,7 @@ class GMM(object):
             self.guide = None
             self.optim = Adam({'lr': 0.1, 'betas': [0.8, 0.99]})
             self.svi = None
-            self.svi_itr = 100
+            self.svi_itr = n_itr
             self.elbo_loss = TraceEnum_ELBO(max_plate_nesting=1)
             self.posterior_est = None
             self.resp = None
@@ -243,7 +243,7 @@ class GMM(object):
             for i in range(self.svi_itr):
                 loss = self.svi.step()
                 losses.append(loss)
-                print('.' if i % 100 else '\n', end='')
+                # print('.' if i % 100 else '\n', end='')
                 end = time.time()
                 self.svi_time = (end - start)
             return losses
