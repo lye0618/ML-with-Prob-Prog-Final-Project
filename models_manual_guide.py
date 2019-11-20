@@ -27,7 +27,7 @@ class GMM(object):
         assert infr == 'svi' or infr == 'mcmc', 'Only svi and mcmc supported'
         # Load data
         # df = read_data(data_type='nyse')
-        data_train, _, data_test, _ = preprocess()
+        data_train, _, data_test, _ = preprocess(ret_type='tensor')
         self.tensor_train = data_train.type(torch.FloatTensor)
         self.tensor_test = data_test.type(torch.FloatTensor)
         self.n_comp = n_comp
