@@ -163,8 +163,8 @@ def run_svi(itr, x, y):
     for i in range(itr):
         loss = svi.step(x, y)
         rec_loss.append(loss)
-        if not i % 50:
-            print('Iter %d, loss = %g' % (i, loss))
+       # if not i % 50:
+       #     print('Iter %d, loss = %g' % (i, loss))
 
     return rec_loss
 
