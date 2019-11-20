@@ -63,15 +63,15 @@ def model(x, y):
                           Normal(torch.tensor([1.0]), torch.tensor([5.0])))
 
     prediction_mean = b_prior + w_prior1 * x[:, 0] + \
-                        w_prior2 * x[:, 1] + w_prior3 * x[:, 2] + \
-                      w_prior4 * x[:, 3] + w_prior5 * x[:, 4] + \
-                      w_prior6 * x[:, 5] + w_prior7 * x[:, 6] + \
-                      w_prior8 * x[:, 7] + w_prior9 * x[:, 8] + \
-                      w_prior10 * x[:, 9] + w_prior11 * x[:, 10] + \
-                      w_prior12 * x[:, 11] + w_prior13 * x[:, 12] + \
-                      w_prior14 * x[:, 13] + w_prior15 * x[:, 14] + \
-                      w_prior16 * x[:, 15] + w_prior17 * x[:, 16] + \
-                      w_prior18 * x[:, 17] + w_prior19 * x[:, 18]
+        w_prior2 * x[:, 1] + w_prior3 * x[:, 2] + \
+        w_prior4 * x[:, 3] + w_prior5 * x[:, 4] + \
+        w_prior6 * x[:, 5] + w_prior7 * x[:, 6] + \
+        w_prior8 * x[:, 7] + w_prior9 * x[:, 8] + \
+        w_prior10 * x[:, 9] + w_prior11 * x[:, 10] + \
+        w_prior12 * x[:, 11] + w_prior13 * x[:, 12] + \
+        w_prior14 * x[:, 13] + w_prior15 * x[:, 14] + \
+        w_prior16 * x[:, 15] + w_prior17 * x[:, 16] + \
+        w_prior18 * x[:, 17] + w_prior19 * x[:, 18]
 
     sigma = pyro.sample("sigma", LogNormal(0., 5.))
 
@@ -125,15 +125,15 @@ def guide(x, y):
     sigma = pyro.sample("sigma", LogNormal(sigma_loc, torch.tensor(0.05)))
 
     prediction_mean = b_prior + w_prior1 * x[:, 0] + \
-                      w_prior2 * x[:, 1] + w_prior3 * x[:, 2] + \
-                      w_prior4 * x[:, 3] + w_prior5 * x[:, 4] + \
-                      w_prior6 * x[:, 5] + w_prior7 * x[:, 6] + \
-                      w_prior8 * x[:, 7] + w_prior9 * x[:, 8] + \
-                      w_prior10 * x[:, 9] + w_prior11 * x[:, 10] + \
-                      w_prior12 * x[:, 11] + w_prior13 * x[:, 12] + \
-                      w_prior14 * x[:, 13] + w_prior15 * x[:, 14] + \
-                      w_prior16 * x[:, 15] + w_prior17 * x[:, 16] + \
-                      w_prior18 * x[:, 17] + w_prior19 * x[:, 18]
+        w_prior2 * x[:, 1] + w_prior3 * x[:, 2] + \
+        w_prior4 * x[:, 3] + w_prior5 * x[:, 4] + \
+        w_prior6 * x[:, 5] + w_prior7 * x[:, 6] + \
+        w_prior8 * x[:, 7] + w_prior9 * x[:, 8] + \
+        w_prior10 * x[:, 9] + w_prior11 * x[:, 10] + \
+        w_prior12 * x[:, 11] + w_prior13 * x[:, 12] + \
+        w_prior14 * x[:, 13] + w_prior15 * x[:, 14] + \
+        w_prior16 * x[:, 15] + w_prior17 * x[:, 16] + \
+        w_prior18 * x[:, 17] + w_prior19 * x[:, 18]
 
     return prediction_mean, sigma, y
 
@@ -160,7 +160,7 @@ def run_svi(itr, x, y):
 
 def plot_losses(rec_loss):
     print('Plotting losses')
-    fig = plt.figure(figsize=(18, 6))
+    plt.figure(figsize=(18, 6))
     plt.subplot(131)
     plt.plot(rec_loss)
     plt.title('Loss Function')
