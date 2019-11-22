@@ -23,8 +23,8 @@ def BNN_Network():
     rtn_type = 'Rtn1q'
     factors = model_data.columns[3:-1]
     n_inputs = len(factors)
-    n_hiddens =[10]
-    activ_func = F.relu 
+    n_hiddens = [10]
+    activ_func = F.relu
     model = BNN.BNN_REG(n_inputs, n_hiddens, activ_func)
     backtest = Backtest(backtest_data)
     # fake_alpha = backtest_data.rename(columns={'Rtn1q': 'alpha'})
