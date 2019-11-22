@@ -95,6 +95,7 @@ ENV/
 .DS_Store/
 .DS_Store
 
+gmm_archive/
 Bayesian_Neural_Network/
 temp/
 requirements.in
